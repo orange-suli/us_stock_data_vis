@@ -10,7 +10,7 @@ A full-stack financial charting application covering NASDAQ, S&P 500, Dow Jones,
 - **Stock search** — enter any US ticker (AAPL, MSFT, NVDA, …) to fetch and chart 5-year history
 - **Candlestick chart** with MA5/MA10/MA20, volume, MACD(12,26,9), and RSI(14) sub-panels
 - **Daily / Weekly / Monthly** period switching
-- **Zoom & pan** — mouse wheel, drag, slider, and date search (±1 month jump)
+- **Zoom & pan** — mouse wheel, drag, slider, date search, or click any data point (±1 month jump)
 - **Hover indicators** — MA, MACD, and RSI values update on mouse move above each panel
 - **CSV export** — download the visible (or custom) date range with all indicators
 - **Auto-refresh** — fresh 5-year data on every startup; incremental updates while running

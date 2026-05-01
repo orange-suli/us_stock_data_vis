@@ -278,6 +278,9 @@ function renderChart(dates, ohlc, volumes) {
     chart.on('mousemove', function(params) {
       if (params && params.dataIndex !== undefined) updateIndicators(params.dataIndex);
     });
+    chart.on('click', function(params) {
+      if (params && params.dataIndex !== undefined) zoomToIndex(params.dataIndex);
+    });
     chart.on('globalout', clearIndicators);
     window.addEventListener('resize', () => chart.resize());
   }
@@ -526,8 +529,12 @@ function zoomToDate(targetDate) {
     }
     if (idx === -1) idx = allDates.length - 1;
   }
+  zoomToIndex(idx);
+}
+
+function zoomToIndex(idx) {
   const total = allDates.length;
-  if (total === 0) return;
+  if (total === 0 || idx < 0 || idx >= total) return;
   const half = Math.min(21, total);
   const startIdx = Math.max(0, idx - half);
   const endIdx = Math.min(total - 1, idx + half);
