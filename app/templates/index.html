@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NASDAQ Chart</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #1a1a2e; font-family: 'Segoe UI', sans-serif; }
+  #header {
+    padding: 8px 20px;
+    background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+    color: #e0e0e0;
+    display: flex; align-items: center; gap: 12px;
+    flex-wrap: wrap;
+  }
+  #indexSelect {
+    font-size: 15px; font-weight: 600; white-space: nowrap;
+    color: #e0e0e0; background: transparent; border: 1px solid #444;
+    border-radius: 4px; padding: 4px 8px; cursor: pointer; outline: none;
+    max-width: 200px;
+  }
+  #indexSelect:focus { border-color: #1e90ff; }
+  #indexSelect option { background: #1a1a2e; color: #e0e0e0; }
+  #header .info { color: #888; font-size: 11px; }
+  .up { color: #26a69a; } .down { color: #ef5350; }
+  #toolbar {
+    display: flex; align-items: center; gap: 8px;
+    margin-left: auto;
+  }
+  #toolbar button {
+    padding: 4px 12px;
+    border: 1px solid #444;
+    background: transparent;
+    color: #aaa;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 12px;
+    transition: all 0.2s;
+  }
+  #toolbar button:hover { border-color: #1e90ff; color: #ddd; }
+  #toolbar button.active {
+    background: #1e90ff;
+    border-color: #1e90ff;
+    color: #fff;
+  }
+  #stockSearch {
+    padding: 4px 8px;
+    border: 1px solid #444;
+    background: #16213e;
+    color: #ddd;
+    border-radius: 3px;
+    font-size: 12px;
+    width: 110px;
+    outline: none;
+    text-transform: uppercase;
+  }
+  #stockSearch:focus { border-color: #1e90ff; }
+  #stockSearch::placeholder { color: #666; text-transform: none; }
+  #dateSearch {
+    padding: 4px 8px;
+    border: 1px solid #444;
+    background: #16213e;
+    color: #ddd;
+    border-radius: 3px;
+    font-size: 12px;
+    width: 160px;
+    outline: none;
+  }
+  #dateSearch:focus { border-color: #1e90ff; }
+  #dateSearch::placeholder { color: #666; }
+  #dlStart, #dlEnd {
+    padding: 4px 6px; border: 1px solid #444; background: #16213e;
+    color: #ddd; border-radius: 3px; font-size: 11px; width: 115px; outline: none;
+  }
+  #dlStart:focus, #dlEnd:focus { border-color: #1e90ff; }
+  #dlBtn {
+    padding: 4px 10px; border: 1px solid #26a69a; background: transparent;
+    color: #26a69a; cursor: pointer; border-radius: 3px; font-size: 12px;
+    transition: all 0.2s;
+  }
+  #dlBtn:hover { background: #26a69a; color: #fff; }
+
+  #chartWrap { position: relative; width: 100%; height: calc(100vh - 44px); }
+  #chart { width: 100%; height: 100%; }
+  .indicator-bar {
+    position: absolute; left: 8%; right: 2%; z-index: 100;
+    font-size: 11px; font-family: 'Consolas', 'Menlo', monospace;
+    pointer-events: none; display: flex; gap: 14px; align-items: center;
+    height: 18px; line-height: 18px;
+    background: rgba(10,12,26,0.85);
+    padding: 0 8px;
+  }
+  #maBar { top: 6px; }
+  #macdBar { top: 65%; }
+  #rsiBar { top: 82%; }
+
+  #loading {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    color: #888; font-size: 18px;
+  }
+  #fetchStatus {
+    position: fixed; top: 48px; right: 20px;
+    color: #1e90ff; font-size: 12px; z-index: 200;
+    pointer-events: none; transition: opacity 0.3s;
+  }
+  #alertOverlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6); z-index: 999;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.25s;
+  }
+  #alertOverlay.show { opacity: 1; pointer-events: auto; }
+  #alertBox {
+    background: #1e1e3a; border: 1px solid #444;
+    border-radius: 8px; padding: 24px 32px;
+    text-align: center; max-width: 360px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  #alertBox p { color: #e0e0e0; font-size: 14px; margin-bottom: 18px; }
+  #alertBox button {
+    padding: 6px 28px; border: none; border-radius: 4px;
+    background: #1e90ff; color: #fff; font-size: 13px; cursor: pointer;
+  }
+  #alertBox button:hover { background: #1976d2; }
+  #alertBox .btn-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  #alertBox .btn-row button { padding: 6px 16px; font-size: 12px; }
+  .btn-nasdaq { background: #1e90ff !important; }
+  .btn-sp { background: #e53935 !important; }
+  .btn-dji { background: #43a047 !important; }
+</style>
+</head>
+<body>
+<div id="header">
+  <select id="indexSelect">
+    <option value="^IXIC">NASDAQ</option>
+    <option value="^GSPC">S&P 500</option>
+    <option value="^DJI">Dow Jones</option>
+  </select>
+  <span id="summary" class="info">Loading...</span>
+  <div id="toolbar">
+    <button data-period="day" class="active">Daily</button>
+    <button data-period="week">Weekly</button>
+    <button data-period="month">Monthly</button>
+    <input type="text" id="stockSearch" placeholder="Ticker..." autocomplete="off" spellcheck="false">
+    <input type="text" id="dateSearch" placeholder="Jump to date..." list="dateList" autocomplete="off">
+    <datalist id="dateList"></datalist>
+    <input type="date" id="dlStart" lang="en" title="Start date">
+    <input type="date" id="dlEnd" lang="en" title="End date">
+    <button id="dlBtn" title="Download CSV">&#10515; CSV</button>
+  </div>
+</div>
+<div id="chartWrap">
+  <div id="maBar" class="indicator-bar" style="color:#aaa"></div>
+  <div id="macdBar" class="indicator-bar" style="color:#aaa"></div>
+  <div id="rsiBar" class="indicator-bar" style="color:#aaa"></div>
+  <div id="chart"></div>
+</div>
+<div id="loading">Loading...</div>
+<div id="fetchStatus"></div>
+<div id="alertOverlay"><div id="alertBox"><p id="alertMsg"></p><button onclick="hideAlert()">OK</button></div></div>
+<script>
+const upColor = '#26a69a';
+const downColor = '#ef5350';
+const DEFAULT_TICKER = '^IXIC';
+let currentTicker = DEFAULT_TICKER;
+let currentPeriod = 'day';
+let allDates = [];
+let allOhlc = [];
+let allVolumes = [];
+let dateMin = '';
+let dateMax = '';
+let ma5 = [], ma10 = [], ma20 = [];
+let macdLine = [], macdSignal = [], macdHist = [];
+let rsiData = [];
+let chart = null;
+
+function calcMA(ohlc, period) {
+  const result = [];
+  for (let i = 0; i < ohlc.length; i++) {
+    if (i < period - 1) { result.push(null); continue; }
+    let sum = 0;
+    for (let j = i - period + 1; j <= i; j++) sum += ohlc[j][1];
+    result.push(+(sum / period).toFixed(2));
+  }
+  return result;
+}
+
+function calcEMA(data, period) {
+  const result = [];
+  const k = 2 / (period + 1);
+  let prev = null;
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) { result.push(null); continue; }
+    if (prev === null) {
+      let sum = 0;
+      for (let j = 0; j < period; j++) sum += data[j];
+      prev = sum / period;
+    } else {
+      prev = data[i] * k + prev * (1 - k);
+    }
+    result.push(+prev.toFixed(4));
+  }
+  return result;
+}
+
+function calcMACD(ohlc, fast, slow, signal) {
+  const closes = ohlc.map(o => o[1]);
+  const emaFast = calcEMA(closes, fast);
+  const emaSlow = calcEMA(closes, slow);
+  const line = [], sig = [], hist = [];
+
+  for (let i = 0; i < ohlc.length; i++) {
+    if (emaFast[i] === null || emaSlow[i] === null) {
+      line.push(null);
+    } else {
+      line.push(+(emaFast[i] - emaSlow[i]).toFixed(4));
+    }
+  }
+
+  let prevSig = null;
+  const k = 2 / (signal + 1);
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === null) { sig.push(null); continue; }
+    if (prevSig === null) {
+      let count = 0, sum = 0;
+      for (let j = i; j >= 0 && count < signal; j--) {
+        if (line[j] !== null) { sum += line[j]; count++; }
+      }
+      prevSig = count === signal ? sum / signal : line[i];
+    } else {
+      prevSig = line[i] * k + prevSig * (1 - k);
+    }
+    sig.push(+prevSig.toFixed(4));
+  }
+
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === null || sig[i] === null) { hist.push(null); }
+    else { hist.push(+(line[i] - sig[i]).toFixed(4)); }
+  }
+  return [line, sig, hist];
+}
+
+function calcRSI(ohlc, period) {
+  const closes = ohlc.map(o => o[1]);
+  const result = [];
+  let avgGain = 0, avgLoss = 0, gains = 0, losses = 0;
+
+  for (let i = 0; i < closes.length; i++) {
+    if (i === 0) { result.push(null); continue; }
+    const change = closes[i] - closes[i-1];
+    if (i <= period) {
+      if (change > 0) gains += change;
+      else losses += Math.abs(change);
+      if (i < period) { result.push(null); continue; }
+      avgGain = gains / period;
+      avgLoss = losses / period;
+    } else {
+      avgGain = (avgGain * (period-1) + (change > 0 ? change : 0)) / period;
+      avgLoss = (avgLoss * (period-1) + (change <= 0 ? Math.abs(change) : 0)) / period;
+    }
+    const rs = avgLoss === 0 ? Infinity : avgGain / avgLoss;
+    result.push(+(100 - 100 / (1 + rs)).toFixed(2));
+  }
+  return result;
+}
+
+function renderChart(dates, ohlc, volumes) {
+  ma5 = calcMA(ohlc, 5);
+  ma10 = calcMA(ohlc, 10);
+  ma20 = calcMA(ohlc, 20);
+  [macdLine, macdSignal, macdHist] = calcMACD(ohlc, 12, 26, 9);
+  rsiData = calcRSI(ohlc, 14);
+
+  if (!chart) {
+    chart = echarts.init(document.getElementById('chart'), 'dark');
+    chart.on('mousemove', function(params) {
+      if (params && params.dataIndex !== undefined) updateIndicators(params.dataIndex);
+    });
+    chart.on('globalout', clearIndicators);
+    window.addEventListener('resize', () => chart.resize());
+  }
+
+  const option = {
+    backgroundColor: '#1a1a2e',
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross' },
+      backgroundColor: 'rgba(30,30,50,0.95)',
+      borderColor: '#333',
+      textStyle: { color: '#ddd', fontSize: 13 },
+      formatter: function(params) {
+        const d = params[0];
+        if (!d) return '';
+        const i = d.dataIndex;
+        const o = ohlc[i];
+        const v = volumes[i][1];
+        const volStr = v >= 1e9 ? (v/1e9).toFixed(2)+'B' : (v/1e6).toFixed(1)+'M';
+        const change = o[1] - o[0];
+        const pct = o[0] ? (change/o[0]*100).toFixed(2) : '0.00';
+        const cls = change >= 0 ? 'up' : 'down';
+        const sign = change >= 0 ? '+' : '';
+        return `<b>${dates[i]}</b><br/>
+          Open: ${o[0].toFixed(2)} &nbsp; High: ${o[3].toFixed(2)} &nbsp; Low: ${o[2].toFixed(2)} &nbsp; Close: ${o[1].toFixed(2)}<br/>
+          <span class="${cls}">Change: ${sign}${change.toFixed(2)} (${sign}${pct}%)</span> &nbsp; Vol: ${volStr}`;
+      }
+    },
+    axisPointer: {
+      link: [{ xAxisIndex: 'all' }],
+      label: { backgroundColor: '#333' }
+    },
+    grid: [
+      { left: '8%', right: '2%', top: '6%', height: '40%' },
+      { left: '8%', right: '2%', top: '50%', height: '12%' },
+      { left: '8%', right: '2%', top: '66%', height: '13%' },
+      { left: '8%', right: '2%', top: '83%', height: '10%' }
+    ],
+    xAxis: [
+      { type: 'category', data: dates, boundaryGap: true, axisLine: { lineStyle: { color: '#333' } }, axisLabel: { show: false } },
+      { type: 'category', gridIndex: 1, data: dates, boundaryGap: true, axisLine: { lineStyle: { color: '#333' } }, axisLabel: { color: '#888', formatter: v => v.length>7 ? v.slice(0,7) : v } },
+      { type: 'category', gridIndex: 2, data: dates, boundaryGap: true, axisLine: { lineStyle: { color: '#333' } }, axisLabel: { show: false } },
+      { type: 'category', gridIndex: 3, data: dates, boundaryGap: true, axisLine: { lineStyle: { color: '#333' } }, axisLabel: { show: false } }
+    ],
+    yAxis: [
+      { scale: true, splitArea: { show: true, areaStyle: { color: ['rgba(255,255,255,0.02)','rgba(255,255,255,0.05)'] } }, axisLine: { lineStyle: { color: '#333' } }, axisLabel: { color: '#888', formatter: v => v.toFixed(0) }, splitLine: { lineStyle: { color: '#222' } } },
+      { scale: true, gridIndex: 1, splitNumber: 2, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#888', formatter: v => v>=1e9 ? (v/1e9).toFixed(1)+'B' : (v/1e6).toFixed(1)+'M', fontSize: 10 }, splitLine: { show: false } },
+      { scale: true, gridIndex: 2, axisLine: { lineStyle: { color: '#333' } }, axisLabel: { color: '#888', fontSize: 10 }, splitLine: { lineStyle: { color: '#222' } } },
+      { gridIndex: 3, min: 0, max: 100, axisLine: { lineStyle: { color: '#333' } }, axisLabel: { color: '#888', fontSize: 10 }, splitLine: { lineStyle: { color: '#222' } }, splitArea: { show: true, areaStyle: { color: ['rgba(255,255,255,0.02)','rgba(255,255,255,0.05)'] } } }
+    ],
+    dataZoom: [
+      { type: 'inside', xAxisIndex: [0,1,2,3], start: 0, end: 100, zoomOnMouseWheel: true, moveOnMouseMove: true },
+      { type: 'slider', xAxisIndex: [0,1,2,3], start: 0, end: 100, height: 22, bottom: 6, borderColor: '#333', backgroundColor: '#1a1a2e',
+        dataBackground: { lineStyle: { color: '#1e90ff' }, areaStyle: { color: 'rgba(30,144,255,0.15)' } },
+        selectedDataBackground: { lineStyle: { color: '#1e90ff' }, areaStyle: { color: 'rgba(30,144,255,0.3)' } },
+        handleStyle: { color: '#1e90ff' }, textStyle: { color: '#888' } }
+    ],
+    series: [
+      { name: 'Candlestick', type: 'candlestick', data: ohlc, itemStyle: { color: upColor, color0: downColor, borderColor: upColor, borderColor0: downColor },
+        markPoint: { symbol: 'pin', symbolSize: 40, data: [{ type: 'max', name: 'High' }, { type: 'min', name: 'Low' }] } },
+      { name: 'MA5', type: 'line', data: ma5, smooth: true, lineStyle: { color: '#ff9800', width: 1 }, symbol: 'none' },
+      { name: 'MA10', type: 'line', data: ma10, smooth: true, lineStyle: { color: '#2196f3', width: 1 }, symbol: 'none' },
+      { name: 'MA20', type: 'line', data: ma20, smooth: true, lineStyle: { color: '#9c27b0', width: 1 }, symbol: 'none' },
+      { name: 'Volume', type: 'bar', xAxisIndex: 1, yAxisIndex: 1,
+        data: volumes.map((v,i) => ({ value: v[1], itemStyle: { color: ohlc[i][1]>=ohlc[i][0] ? upColor : downColor } })) },
+      { name: 'MACD Hist', type: 'bar', xAxisIndex: 2, yAxisIndex: 2,
+        data: macdHist.map((v,i) => v===null ? null : { value: v, itemStyle: { color: v>=0 ? upColor : downColor } }) },
+      { name: 'MACD Line', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: macdLine, symbol: 'none', lineStyle: { color: '#e0e0e0', width: 1 } },
+      { name: 'Signal', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: macdSignal, symbol: 'none', lineStyle: { color: '#ff5722', width: 1 } },
+      { name: 'RSI', type: 'line', xAxisIndex: 3, yAxisIndex: 3, data: rsiData, symbol: 'none', lineStyle: { color: '#00bcd4', width: 1.5 },
+        markLine: { silent: true, symbol: 'none', lineStyle: { type: 'dashed', width: 1 },
+          data: [{ yAxis: 70, lineStyle: { color: '#ef5350' } }, { yAxis: 30, lineStyle: { color: '#26a69a' } }, { yAxis: 50, lineStyle: { color: '#666' } }] } }
+    ]
+  };
+
+  chart.setOption(option, true);
+}
+
+function updateIndicators(i) {
+  if (i === undefined || i < 0 || i >= allDates.length) return;
+
+  const m5 = ma5[i], m10 = ma10[i], m20 = ma20[i];
+  let maHTML = '';
+  if (m5 !== null) maHTML += `<span>MA5: <span style="color:#ff9800;font-weight:600">${m5.toFixed(2)}</span></span>`;
+  if (m10 !== null) maHTML += `<span>MA10: <span style="color:#2196f3;font-weight:600">${m10.toFixed(2)}</span></span>`;
+  if (m20 !== null) maHTML += `<span>MA20: <span style="color:#9c27b0;font-weight:600">${m20.toFixed(2)}</span></span>`;
+  document.getElementById('maBar').innerHTML = maHTML;
+
+  const ml = macdLine[i], ms = macdSignal[i], mh = macdHist[i];
+  let macdHTML = '';
+  if (ml !== null) {
+    macdHTML += `<span>MACD: <span style="color:#e0e0e0;font-weight:600">${ml.toFixed(4)}</span></span>`;
+    macdHTML += `<span>Signal: <span style="color:#ff5722;font-weight:600">${ms.toFixed(4)}</span></span>`;
+    macdHTML += `<span>Histogram: <span class="${mh>=0?'up':'down'}" style="font-weight:600">${mh.toFixed(4)}</span></span>`;
+  }
+  document.getElementById('macdBar').innerHTML = macdHTML;
+
+  const rsi = rsiData[i];
+  let rsiHTML = '';
+  if (rsi !== null) {
+    let rsiClr = rsi >= 70 ? '#ef5350' : rsi <= 30 ? '#26a69a' : '#00bcd4';
+    rsiHTML = `<span>RSI(14): <span style="color:${rsiClr};font-weight:600">${rsi.toFixed(2)}</span></span>`;
+  }
+  document.getElementById('rsiBar').innerHTML = rsiHTML;
+}
+
+function clearIndicators() {
+  document.getElementById('maBar').innerHTML = '';
+  document.getElementById('macdBar').innerHTML = '';
+  document.getElementById('rsiBar').innerHTML = '';
+}
+
+async function loadPeriod(period) {
+  const urls = { day: '/api/data', week: '/api/data/weekly', month: '/api/data/monthly' };
+  const resp = await fetch(`${urls[period]}?ticker=${encodeURIComponent(currentTicker)}`);
+  const json = await resp.json();
+  if (json.error) { alert(json.error); return; }
+  allDates = json.dates;
+  allOhlc = json.ohlc;
+  allVolumes = json.volumes;
+  clearIndicators();
+  renderChart(allDates, allOhlc, allVolumes);
+  document.getElementById('loading').style.display = 'none';
+}
+
+async function loadSummary() {
+  const resp = await fetch(`/api/summary?ticker=${encodeURIComponent(currentTicker)}`);
+  const s = await resp.json();
+  if (s.error) return;
+  dateMin = s.date_min;
+  dateMax = s.date_max;
+  document.getElementById('summary').innerHTML =
+    `${s.latest_close.toFixed(0)} <span class="${s.change>=0?'up':'down'}">${s.change>=0?'+':''}${s.change.toFixed(0)} (${s.change_pct.toFixed(2)}%)</span> · ${s.date_min} ~ ${s.date_max} · ${s.total_rows} trading days`;
+  document.title = `${currentTicker} — K线图`;
+}
+
+async function loadDates() {
+  const resp = await fetch(`/api/dates?ticker=${encodeURIComponent(currentTicker)}`);
+  const dates = await resp.json();
+  const datalist = document.getElementById('dateList');
+  datalist.innerHTML = dates.reverse().map(d => `<option value="${d}">`).join('');
+}
+
+async function switchTicker(ticker) {
+  currentTicker = ticker;
+  if (isIndex(ticker)) {
+    document.getElementById('indexSelect').value = ticker;
+  }
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('fetchStatus').textContent = '';
+  clearIndicators();
+  await Promise.all([loadPeriod(currentPeriod), loadSummary(), loadDates()]);
+  document.getElementById('loading').style.display = 'none';
+}
+
+function showAlert(msg) {
+  document.getElementById('alertMsg').textContent = msg;
+  document.getElementById('alertOverlay').classList.add('show');
+}
+function hideAlert() {
+  document.getElementById('alertOverlay').classList.remove('show');
+}
+
+const INDICES = ['^IXIC', '^GSPC', '^DJI'];
+function isIndex(ticker) { return INDICES.includes(ticker); }
+
+function showReturnDialog(preselectTicker) {
+  const overlay = document.getElementById('alertOverlay');
+  const box = document.getElementById('alertBox');
+  box.innerHTML = `
+    <p style="color:#e0e0e0;font-size:14px;margin-bottom:16px">Return to which index?</p>
+    <div class="btn-row">
+      <button class="btn-nasdaq" data-idx="^IXIC">NASDAQ</button>
+      <button class="btn-sp" data-idx="^GSPC">S&P 500</button>
+      <button class="btn-dji" data-idx="^DJI">Dow Jones</button>
+    </div>
+  `;
+  box.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', function() {
+      overlay.classList.remove('show');
+      document.getElementById('indexSelect').value = this.dataset.idx;
+      switchTicker(this.dataset.idx);
+    });
+  });
+  overlay.classList.add('show');
+}
+
+function hideReturnDialog() {
+  document.getElementById('alertOverlay').classList.remove('show');
+  // Restore dropdown to current ticker
+  if (isIndex(currentTicker)) {
+    document.getElementById('indexSelect').value = currentTicker;
+  }
+}
+document.getElementById('alertOverlay').addEventListener('click', function(e) {
+  if (e.target === this) {
+    hideAlert();
+    hideReturnDialog();
+  }
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    hideAlert();
+    hideReturnDialog();
+  }
+});
+
+async function searchStock(ticker) {
+  if (!ticker) return;
+  ticker = ticker.toUpperCase().trim();
+  const statusEl = document.getElementById('fetchStatus');
+  statusEl.textContent = `Fetching ${ticker}...`;
+  document.getElementById('loading').style.display = 'block';
+
+  try {
+    const resp = await fetch('/api/fetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticker })
+    });
+    const json = await resp.json();
+    if (json.error) {
+      statusEl.textContent = '';
+      document.getElementById('loading').style.display = 'none';
+      showAlert(`Ticker "${ticker}" not found or has no data.`);
+      return;
+    }
+
+    statusEl.textContent = json.source === 'db' ? `${ticker} (from DB)` : `${ticker} (fetched ${json.rows} rows)`;
+    setTimeout(() => { statusEl.style.opacity = '0'; }, 2000);
+    statusEl.style.opacity = '1';
+
+    await switchTicker(ticker);
+  } catch (e) {
+    statusEl.textContent = '';
+    document.getElementById('loading').style.display = 'none';
+    showAlert('Network error. Please check your connection.');
+  }
+}
+
+function zoomToDate(targetDate) {
+  let idx = allDates.indexOf(targetDate);
+  if (idx === -1) {
+    for (let i = 0; i < allDates.length; i++) {
+      if (allDates[i] >= targetDate) { idx = i; break; }
+    }
+    if (idx === -1) idx = allDates.length - 1;
+  }
+  const total = allDates.length;
+  if (total === 0) return;
+  const half = Math.min(21, total);
+  const startIdx = Math.max(0, idx - half);
+  const endIdx = Math.min(total - 1, idx + half);
+  chart.dispatchAction({ type: 'dataZoom', start: (startIdx/total)*100, end: ((endIdx+1)/total)*100 });
+}
+
+async function init() {
+  await switchTicker(DEFAULT_TICKER);
+
+  // Index select dropdown
+  const indexSelect = document.getElementById('indexSelect');
+  indexSelect.addEventListener('change', function() {
+    const targetIdx = this.value;
+    if (isIndex(currentTicker)) {
+      // Already on an index — switch directly
+      switchTicker(targetIdx);
+    } else {
+      // On a stock — show return dialog
+      showReturnDialog(targetIdx);
+    }
+  });
+  // Also trigger on click when viewing a stock (before change fires)
+  indexSelect.addEventListener('mousedown', function(e) {
+    if (!isIndex(currentTicker)) {
+      e.preventDefault();
+      showReturnDialog(this.value);
+    }
+  });
+
+  // Period toggle
+  document.querySelectorAll('#toolbar button').forEach(btn => {
+    btn.addEventListener('click', async function() {
+      document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      currentPeriod = this.dataset.period;
+      document.getElementById('loading').style.display = 'block';
+      await loadPeriod(currentPeriod);
+      document.getElementById('loading').style.display = 'none';
+    });
+  });
+
+  // Stock search
+  const stockInput = document.getElementById('stockSearch');
+  stockInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') searchStock(this.value);
+  });
+
+  // Date search
+  const dateInput = document.getElementById('dateSearch');
+  dateInput.addEventListener('input', function() {
+    const val = this.value.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(val)) zoomToDate(val);
+  });
+  dateInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') zoomToDate(this.value.trim());
+  });
+
+  // Download button
+  const dlBtn = document.getElementById('dlBtn');
+  const dlStart = document.getElementById('dlStart');
+  const dlEnd = document.getElementById('dlEnd');
+
+  // Auto-fill date range from chart's dataZoom when it changes
+  chart.on('datazoom', function() {
+    if (!chart) return;
+    const opt = chart.getOption();
+    if (opt && opt.dataZoom) {
+      const dz = opt.dataZoom[0];
+      if (dz && allDates.length > 0) {
+        const startIdx = Math.floor(allDates.length * dz.start / 100);
+        const endIdx = Math.min(Math.ceil(allDates.length * dz.end / 100), allDates.length - 1);
+        dlStart.value = allDates[startIdx] || '';
+        dlEnd.value = allDates[endIdx] || '';
+      }
+    }
+  });
+
+  dlBtn.addEventListener('click', function() {
+    const start = dlStart.value.trim();
+    const end = dlEnd.value.trim();
+
+    if (!start || !end) {
+      showAlert('Please set both start and end dates.');
+      return;
+    }
+    if (end < start) {
+      showAlert('End date is earlier than start date.');
+      return;
+    }
+    if (start < dateMin || end > dateMax) {
+      showAlert(`Date range must be within ${dateMin} ~ ${dateMax}.`);
+      return;
+    }
+
+    const url = `/api/download?ticker=${encodeURIComponent(currentTicker)}&start=${start}&end=${end}`;
+    window.open(url, '_blank');
+  });
+}
+
+init();
+</script>
+</body>
+</html>

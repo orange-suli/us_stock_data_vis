@@ -1,0 +1,18 @@
+# Database (auto-generated each session)
+app/nasdaq.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Conda
+.env/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
