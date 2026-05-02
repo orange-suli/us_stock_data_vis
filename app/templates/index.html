@@ -23,6 +23,7 @@
   }
   #indexSelect:focus { border-color: #1e90ff; }
   #indexSelect option { background: #1a1a2e; color: #e0e0e0; }
+  #stockLabel { color: #1e90ff; font-size: 12px; display: none; }
   #header .info { color: #888; font-size: 11px; }
   .up { color: #26a69a; } .down { color: #ef5350; }
   #toolbar {
@@ -153,6 +154,7 @@
     <option value="^GSPC">S&P 500</option>
     <option value="^DJI">Dow Jones</option>
   </select>
+  <span id="stockLabel"></span>
   <span id="summary" class="info">Loading...</span>
   <div id="toolbar">
     <button data-period="day" class="active">Daily</button>
@@ -442,11 +444,37 @@ async function loadDates() {
   datalist.innerHTML = dates.reverse().map(d => `<option value="${d}">`).join('');
 }
 
-async function switchTicker(ticker) {
+function mapExchangeToIndex(ex) {
+  // NASDAQ family exchanges → ^IXIC
+  if (/^N[A-Z]/.test(ex)) return '^IXIC';
+  return null; // keep current index for others
+}
+
+async function switchTicker(ticker, stockName, stockEx) {
   currentTicker = ticker;
+  const stockLabel = document.getElementById('stockLabel');
+  const indexSelect = document.getElementById('indexSelect');
+
   if (isIndex(ticker)) {
-    document.getElementById('indexSelect').value = ticker;
+    stockLabel.style.display = 'none';
+    indexSelect.value = ticker;
+  } else {
+    let name = stockName, ex = stockEx;
+    // Fallback: fetch ticker info if name/exchange not provided
+    if (!name) {
+      try {
+        const resp = await fetch(`/api/ticker-info?ticker=${encodeURIComponent(ticker)}`);
+        const info = await resp.json();
+        name = info.name || ticker;
+        ex = info.exchange || '';
+      } catch(e) { name = ticker; ex = ''; }
+    }
+    stockLabel.textContent = `${name} (${ticker})`;
+    stockLabel.style.display = 'block';
+    const idx = mapExchangeToIndex(ex);
+    if (idx) indexSelect.value = idx;
   }
+
   document.getElementById('loading').style.display = 'block';
   document.getElementById('fetchStatus').textContent = '';
   clearIndicators();
@@ -506,7 +534,7 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
-async function searchStock(ticker) {
+async function searchStock(ticker, stockName, stockEx) {
   if (!ticker) return;
   ticker = ticker.toUpperCase().trim();
   const statusEl = document.getElementById('fetchStatus');
@@ -531,7 +559,7 @@ async function searchStock(ticker) {
     setTimeout(() => { statusEl.style.opacity = '0'; }, 2000);
     statusEl.style.opacity = '1';
 
-    await switchTicker(ticker);
+    await switchTicker(ticker, stockName, stockEx);
   } catch (e) {
     statusEl.textContent = '';
     document.getElementById('loading').style.display = 'none';
@@ -609,7 +637,7 @@ async function init() {
         const items = await resp.json();
         if (items.length === 0) { suggestBox.style.display = 'none'; return; }
         suggestBox.innerHTML = items.map(item =>
-          `<div class="item" data-sym="${item.symbol}">
+          `<div class="item" data-sym="${item.symbol}" data-name="${item.name.replace(/"/g,'&quot;')}" data-ex="${item.exchange}">
             <span class="sym">${item.symbol}</span>
             <span class="nm">${item.name}</span>
           </div>`
@@ -644,7 +672,7 @@ async function init() {
   suggestBox.addEventListener('click', function(e) {
     const item = e.target.closest('.item');
     if (item) {
-      searchStock(item.dataset.sym);
+      searchStock(item.dataset.sym, item.dataset.name, item.dataset.ex);
       suggestBox.style.display = 'none';
       stockInput.value = '';
     }
@@ -704,6 +732,20 @@ async function init() {
     const url = `/api/download?ticker=${encodeURIComponent(currentTicker)}&start=${start}&end=${end}`;
     window.open(url, '_blank');
   });
+
+  // Enter on date range inputs zooms chart to that range
+  function zoomToRange() {
+    const start = dlStart.value.trim();
+    const end = dlEnd.value.trim();
+    if (!start || !end || end < start) return;
+    let si = allDates.indexOf(start), ei = allDates.indexOf(end);
+    if (si === -1 || ei === -1) return;
+    if (si > ei) { const t = si; si = ei; ei = t; }
+    const total = allDates.length;
+    chart.dispatchAction({ type: 'dataZoom', start: (si/total)*100, end: ((ei+1)/total)*100 });
+  }
+  dlStart.addEventListener('keydown', function(e) { if (e.key === 'Enter') zoomToRange(); });
+  dlEnd.addEventListener('keydown', function(e) { if (e.key === 'Enter') zoomToRange(); });
 }
 
 init();

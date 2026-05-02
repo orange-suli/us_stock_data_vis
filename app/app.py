@@ -486,5 +486,20 @@ def api_search():
     return jsonify(results[:8])
 
 
+@app.route("/api/ticker-info")
+def api_ticker_info():
+    ticker = request.args.get("ticker", "").strip().upper()
+    if not ticker:
+        return jsonify({"error": "ticker required"}), 400
+    try:
+        yt = yf.Ticker(ticker)
+        info = yt.info
+        name = info.get("shortName") or info.get("longName") or ticker
+        ex = info.get("exchange", "")
+    except Exception:
+        name, ex = ticker, ""
+    return jsonify({"ticker": ticker, "name": name, "exchange": ex})
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)
