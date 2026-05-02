@@ -7,12 +7,13 @@ A full-stack financial charting application covering NASDAQ, S&P 500, Dow Jones,
 ## Features
 
 - **Three major indices** — NASDAQ (^IXIC), S&P 500 (^GSPC), Dow Jones (^DJI) pre-loaded on startup
-- **Stock search** — enter any US ticker (AAPL, MSFT, NVDA, …) to fetch and chart 5-year history
+- **Stock search** — fuzzy autocomplete by ticker or company name (e.g. "san" or "apple")
+- **Stock info** — company name + ticker shown below the index dropdown; dropdown auto-switches to the stock's exchange
 - **Candlestick chart** with MA5/MA10/MA20, volume, MACD(12,26,9), and RSI(14) sub-panels
 - **Daily / Weekly / Monthly** period switching
-- **Zoom & pan** — mouse wheel, drag, slider, date search, or click any data point (±1 month jump)
+- **Zoom & pan** — mouse wheel, drag, slider, date search, click any data point, or set a date range and press Enter
 - **Hover indicators** — MA, MACD, and RSI values update on mouse move above each panel
-- **CSV export** — download the visible (or custom) date range with all indicators
+- **CSV export** — download the visible or custom date range with all indicators
 - **Auto-refresh** — fresh 5-year data on every startup; incremental updates while running
 - **Self-cleaning** — database wiped on exit; no stale data between sessions
 
@@ -65,6 +66,8 @@ conda run -n nasdaq python app/app.py
 | `GET` | `/api/data/monthly?ticker=` | Monthly OHLCV |
 | `GET` | `/api/dates?ticker=` | All trading dates |
 | `POST` | `/api/fetch` `{"ticker":"AAPL"}` | Fetch & cache stock |
+| `GET` | `/api/search?q=` | Autocomplete search (ticker/name) |
+| `GET` | `/api/ticker-info?ticker=` | Company name & exchange |
 | `GET` | `/api/download?ticker=&start=&end=` | CSV with indicators |
 
 Default ticker is `^IXIC`. All `GET` endpoints accept `?ticker=`.
