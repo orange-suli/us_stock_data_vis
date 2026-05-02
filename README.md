@@ -35,6 +35,19 @@ bash deploy.sh
 
 The script creates the `nasdaq` conda environment, installs dependencies, pulls 5 years of historical data for all three indices, and opens `http://localhost:5000`.
 
+### Desktop EXE (Windows)
+
+On the `desktop-exe` branch:
+
+```bash
+# One-click build
+build_exe.bat
+
+# Output: dist/MarketChart.exe (~180 MB)
+```
+
+Double-click `MarketChart.exe` — no console, browser opens automatically. The app bundles Python, Flask, yfinance, and all templates into a single portable executable.
+
 ### Manual setup
 
 ```bash
@@ -46,13 +59,17 @@ conda run -n nasdaq python app/app.py
 ## Project Structure
 
 ```
-├── deploy.bat              # Windows launcher
-├── deploy.sh               # Linux/macOS launcher
+├── deploy.bat              # Web launcher (Windows)
+├── deploy.sh               # Web launcher (Linux/macOS)
+├── build_exe.bat           # EXE build script (desktop-exe branch)
+├── desktop_app.py          # Desktop entry point (desktop-exe branch)
 ├── requirements.txt        # Python dependencies
 ├── app/
+│   ├── __init__.py
 │   ├── app.py              # Flask backend (API + DB + yfinance)
 │   └── templates/
-│       └── index.html      # Frontend (ECharts)
+│       ├── index.html      # Daily chart (ECharts)
+│       └── intraday.html   # Intraday chart (ECharts)
 └── README.md
 ```
 
