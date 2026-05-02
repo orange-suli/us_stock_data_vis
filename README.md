@@ -9,10 +9,14 @@ A full-stack financial charting application covering NASDAQ, S&P 500, Dow Jones,
 - **Three major indices** — NASDAQ (^IXIC), S&P 500 (^GSPC), Dow Jones (^DJI) pre-loaded on startup
 - **Stock search** — fuzzy autocomplete by ticker or company name (e.g. "san" or "apple")
 - **Stock info** — company name + ticker shown below the index dropdown; dropdown auto-switches to the stock's exchange
+- **Watchlist** — collapsible sidebar with persistent stock list (localStorage); add/remove stocks with autocomplete
+- **Bollinger Bands** — overlaid on main chart (configurable period & multiplier)
+- **Customizable indicators** — gear icon to adjust MA/MACD/RSI/BB parameters, persisted across sessions
 - **Candlestick chart** with MA5/MA10/MA20, volume, MACD(12,26,9), and RSI(14) sub-panels
 - **Daily / Weekly / Monthly** period switching
 - **Zoom & pan** — mouse wheel, drag, slider, date search, click any data point, or set a date range and press Enter
-- **Hover indicators** — MA, MACD, and RSI values update on mouse move above each panel
+- **Export as PNG** — one-click chart screenshot at 2x resolution
+- **Hover indicators** — MA, MACD, BB, and RSI values update on mouse move above each panel
 - **Intraday chart** — click any data point then "Intraday: YYYY-MM-DD" for 1-minute line chart with MACD/Volume/RSI (last 30 days, free via yfinance)
 - **CSV export** — download the visible or custom date range with all indicators
 - **Auto-refresh** — fresh 5-year data on every startup; incremental updates while running
