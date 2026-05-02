@@ -592,11 +592,17 @@ function zoomToIndex(idx) {
   const startIdx = Math.max(0, idx - half);
   const endIdx = Math.min(total - 1, idx + half);
   chart.dispatchAction({ type: 'dataZoom', start: (startIdx/total)*100, end: ((endIdx+1)/total)*100 });
-  // Show intraday button for the centered date
+  // Show intraday button only for dates within last 30 days
   const intraBtn = document.getElementById('intraBtn');
-  intraBtn.textContent = `Intraday: ${allDates[idx]}`;
-  intraBtn.href = `/intraday?ticker=${encodeURIComponent(currentTicker)}&date=${allDates[idx]}`;
-  intraBtn.style.display = 'inline';
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
+  const clickedDate = new Date(allDates[idx] + 'T00:00:00');
+  if (clickedDate >= cutoff) {
+    intraBtn.textContent = `Intraday: ${allDates[idx]}`;
+    intraBtn.href = `/intraday?ticker=${encodeURIComponent(currentTicker)}&date=${allDates[idx]}`;
+    intraBtn.style.display = 'inline';
+  } else {
+    intraBtn.style.display = 'none';
+  }
 }
 
 async function init() {

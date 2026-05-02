@@ -521,7 +521,13 @@ def api_intraday():
         return jsonify({"error": str(e)}), 500
 
     if df.empty:
-        return jsonify({"error": f"No intraday data for {ticker} on {date}"}), 404
+        msg = f"No intraday data for {ticker} on {date}."
+        cutoff = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        if date < cutoff:
+            msg += " Yahoo Finance free tier only provides 1-minute data for the last 30 days."
+        else:
+            msg += " This may be a weekend or market holiday."
+        return jsonify({"error": msg}), 404
 
     times = []
     ohlc = []
