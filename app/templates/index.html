@@ -74,6 +74,15 @@
   #suggestBox .item:hover { background: #1e90ff33; }
   #suggestBox .item .sym { color: #1e90ff; font-weight: 600; white-space: nowrap; }
   #suggestBox .item .nm { color: #aaa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #suggestBox .item.selected, #watchSuggestBox .item.selected { background: #1e90ff33; }
+  #watchSuggestBox .item {
+    padding: 6px 10px; cursor: pointer; font-size: 12px;
+    border-bottom: 1px solid #1e1e3a;
+    display: flex; justify-content: space-between; gap: 12px;
+  }
+  #watchSuggestBox .item:hover { background: #1e90ff33; }
+  #watchSuggestBox .item .sym { color: #1e90ff; font-weight: 600; white-space: nowrap; }
+  #watchSuggestBox .item .nm { color: #aaa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #dateSearch {
     padding: 4px 8px;
     border: 1px solid #444;
@@ -249,7 +258,10 @@
   <h3>Watchlist</h3>
   <div id="watchList"></div>
   <div id="watchAdd">
-    <input type="text" id="watchInput" placeholder="Add ticker..." autocomplete="off" spellcheck="false">
+    <span style="position:relative;flex:1">
+      <input type="text" id="watchInput" placeholder="Add ticker..." autocomplete="off" spellcheck="false" style="width:100%">
+      <div id="watchSuggestBox" style="position:absolute;top:100%;left:0;right:0;background:#16213e;border:1px solid #333;border-top:none;border-radius:0 0 4px 4px;z-index:300;display:none;max-height:200px;overflow-y:auto"></div>
+    </span>
     <button id="watchAddBtn">+</button>
   </div>
 </div>
@@ -289,7 +301,7 @@ function renderWatchlist() {
   const list = loadWatchlist();
   const el = document.getElementById('watchList');
   el.innerHTML = list.map(item =>
-    `<div class="wl-item${item.ticker===currentTicker?' active':''}" data-ticker="${item.ticker}">
+    `<div class="wl-item${item.ticker===currentTicker?' active':''}" data-ticker="${item.ticker}" data-name="${(item.name||'').replace(/"/g,'&quot;')}">
       <span class="sym">${item.ticker}</span>
       <span class="nm">${item.name||''}</span>
       <span class="del" data-ticker="${item.ticker}">&times;</span>
@@ -299,7 +311,7 @@ function renderWatchlist() {
   el.querySelectorAll('.wl-item').forEach(div => {
     div.addEventListener('click', function(e) {
       if (e.target.classList.contains('del')) return;
-      switchTicker(this.dataset.ticker);
+      searchStock(this.dataset.ticker, this.dataset.name);
     });
   });
   el.querySelectorAll('.del').forEach(del => {
@@ -333,16 +345,85 @@ watchToggle.addEventListener('click', function() {
   watchToggle.classList.toggle('open', watchOpen);
 });
 
-// Add to watchlist button
-document.getElementById('watchAddBtn').addEventListener('click', function() {
-  const input = document.getElementById('watchInput');
-  const ticker = input.value.trim().toUpperCase();
-  if (!ticker) return;
-  addToWatchlist(ticker);
-  input.value = '';
+// Watchlist add with autocomplete
+const watchInput = document.getElementById('watchInput');
+const watchSuggestBox = document.getElementById('watchSuggestBox');
+let watchSuggestTimer = null;
+
+watchInput.addEventListener('input', function() {
+  clearTimeout(watchSuggestTimer);
+  const q = this.value.trim();
+  if (q.length < 2) { watchSuggestBox.style.display = 'none'; return; }
+  watchSuggestTimer = setTimeout(async () => {
+    try {
+      const resp = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+      const items = await resp.json();
+      if (items.length === 0) { watchSuggestBox.style.display = 'none'; return; }
+      watchSuggestBox.innerHTML = items.map(item =>
+        `<div class="item" data-sym="${item.symbol}" data-name="${item.name.replace(/"/g,'&quot;')}">
+          <span class="sym">${item.symbol}</span>
+          <span class="nm">${item.name}</span>
+        </div>`
+      ).join('');
+      watchSuggestBox.style.display = 'block';
+    } catch(e) { watchSuggestBox.style.display = 'none'; }
+  }, 200);
 });
-document.getElementById('watchInput').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') { document.getElementById('watchAddBtn').click(); }
+
+watchInput.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') { watchSuggestBox.style.display = 'none'; return; }
+  if (e.key === 'Enter') {
+    const sel = watchSuggestBox.querySelector('.item.selected');
+    if (sel) {
+      addToWatchlist(sel.dataset.sym, sel.dataset.name);
+      watchSuggestBox.style.display = 'none';
+    } else {
+      const ticker = this.value.trim().toUpperCase();
+      if (!ticker) return;
+      // Try fetching ticker info to get name
+      fetch(`/api/ticker-info?ticker=${encodeURIComponent(ticker)}`)
+        .then(r => r.json())
+        .then(info => addToWatchlist(ticker, info.name || ''))
+        .catch(() => addToWatchlist(ticker));
+    }
+    this.value = '';
+    return;
+  }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const items = watchSuggestBox.querySelectorAll('.item');
+    if (items.length === 0) return;
+    const sel = watchSuggestBox.querySelector('.item.selected');
+    let idx = sel ? Array.from(items).indexOf(sel) : -1;
+    if (e.key === 'ArrowDown') idx = (idx + 1) % items.length;
+    else idx = idx <= 0 ? items.length - 1 : idx - 1;
+    items.forEach(i => i.classList.remove('selected'));
+    items[idx].classList.add('selected');
+    items[idx].scrollIntoView({ block: 'nearest' });
+  }
+});
+
+watchSuggestBox.addEventListener('click', function(e) {
+  const item = e.target.closest('.item');
+  if (item) {
+    addToWatchlist(item.dataset.sym, item.dataset.name);
+    watchSuggestBox.style.display = 'none';
+    watchInput.value = '';
+  }
+});
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#watchAdd')) watchSuggestBox.style.display = 'none';
+});
+
+document.getElementById('watchAddBtn').addEventListener('click', function() {
+  const ticker = watchInput.value.trim().toUpperCase();
+  if (!ticker) return;
+  fetch(`/api/ticker-info?ticker=${encodeURIComponent(ticker)}`)
+    .then(r => r.json())
+    .then(info => addToWatchlist(ticker, info.name || ''))
+    .catch(() => addToWatchlist(ticker));
+  watchInput.value = '';
 });
 
 function calcMA(ohlc, period) {

@@ -345,6 +345,15 @@ def api_data():
     try_update_ticker(ticker)
     conn = get_db()
     rows = all_rows(conn, ticker)
+    # If fewer than ~3 months of data (60 trading days), do a full fetch
+    if len(rows) < 60 and ticker != DEFAULT_TICKER:
+        conn.close()
+        try:
+            fetch_full_ticker(ticker)
+        except RuntimeError:
+            pass
+        conn = get_db()
+        rows = all_rows(conn, ticker)
     conn.close()
     dates, ohlc, volumes = rows_to_lists(rows)
     return jsonify({"ticker": ticker, "dates": dates, "ohlc": ohlc, "volumes": volumes})
