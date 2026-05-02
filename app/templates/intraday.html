@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Intraday Chart</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #1a1a2e; font-family: 'Segoe UI', sans-serif; }
+  #header {
+    padding: 8px 20px;
+    background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+    color: #e0e0e0;
+    display: flex; align-items: center; gap: 14px;
+  }
+  #header h1 { font-size: 17px; font-weight: 600; }
+  #header span { color: #888; font-size: 12px; }
+  #backBtn {
+    padding: 4px 12px; border: 1px solid #1e90ff; background: transparent;
+    color: #1e90ff; cursor: pointer; border-radius: 3px; font-size: 12px;
+    margin-left: auto; text-decoration: none; transition: all 0.2s;
+  }
+  #backBtn:hover { background: #1e90ff; color: #fff; }
+  .up { color: #26a69a; } .down { color: #ef5350; }
+  #chart { width: 100%; height: calc(100vh - 44px); }
+  .indicator-bar {
+    position: absolute; left: 8%; right: 2%; z-index: 100;
+    font-size: 11px; font-family: 'Consolas', 'Menlo', monospace;
+    pointer-events: none; display: flex; gap: 14px; align-items: center;
+    height: 18px; line-height: 18px;
+    background: rgba(10,12,26,0.85); padding: 0 8px;
+  }
+</style>
+</head>
+<body>
+<div id="header">
+  <h1 id="title">Loading...</h1>
+  <span id="info"></span>
+  <a id="backBtn" href="/">&larr; Back to daily</a>
+</div>
+<div style="position:relative;width:100%;height:calc(100vh - 44px)">
+  <div id="maBar" class="indicator-bar" style="color:#aaa;top:6px"></div>
+  <div id="macdBar" class="indicator-bar" style="color:#aaa;top:60%"></div>
+  <div id="rsiBar" class="indicator-bar" style="color:#aaa;top:79%"></div>
+  <div id="chart"></div>
+</div>
+<script>
+const params = new URLSearchParams(location.search);
+const ticker = params.get('ticker') || '^IXIC';
+const date = params.get('date') || '';
+
+const upColor = '#26a69a';
+const downColor = '#ef5350';
+let ma5=[], ma10=[], ma20=[];
+let macdLine=[], macdSignal=[], macdHist=[];
+let rsiData=[];
+let times=[], ohlc=[], volumes=[];
+
+async function init() {
+  if (!date) return;
+  document.getElementById('title').textContent = 'Loading...';
+
+  const resp = await fetch(`/api/intraday?ticker=${encodeURIComponent(ticker)}&date=${date}`);
+  const data = await resp.json();
+  if (data.error) {
+    document.getElementById('title').textContent = data.error;
+    return;
+  }
+
+  document.getElementById('title').textContent = `${data.name} (${data.ticker})`;
+  document.getElementById('info').textContent = `Intraday · ${data.date}`;
+  document.title = `${data.ticker} Intraday ${data.date}`;
+
+  times = data.times;
+  ohlc = data.ohlc;
+  volumes = data.volumes;
+  ma5 = data.ma5; ma10 = data.ma10; ma20 = data.ma20;
+  macdLine = data.macd_line; macdSignal = data.macd_signal; macdHist = data.macd_hist;
+  rsiData = data.rsi14;
+
+  renderChart();
+}
+
+function renderChart() {
+  const closes = ohlc.map(o => o[1]);
+  const chart = echarts.init(document.getElementById('chart'), 'dark');
+
+  chart.on('mousemove', function(params) {
+    if (!params || params.dataIndex === undefined) return;
+    const i = params.dataIndex;
+    let maHTML = '';
+    if (ma5[i]!==null) maHTML += `<span>MA5: <span style="color:#ff9800;font-weight:600">${ma5[i].toFixed(2)}</span></span>`;
+    if (ma10[i]!==null) maHTML += `<span>MA10: <span style="color:#2196f3;font-weight:600">${ma10[i].toFixed(2)}</span></span>`;
+    if (ma20[i]!==null) maHTML += `<span>MA20: <span style="color:#9c27b0;font-weight:600">${ma20[i].toFixed(2)}</span></span>`;
+    document.getElementById('maBar').innerHTML = maHTML;
+    let mH = '';
+    if (macdLine[i]!==null) {
+      mH += `<span>MACD: <span style="color:#e0e0e0;font-weight:600">${macdLine[i].toFixed(4)}</span></span>`;
+      mH += `<span>Signal: <span style="color:#ff5722;font-weight:600">${macdSignal[i].toFixed(4)}</span></span>`;
+      mH += `<span>Hist: <span class="${macdHist[i]>=0?'up':'down'}" style="font-weight:600">${macdHist[i].toFixed(4)}</span></span>`;
+    }
+    document.getElementById('macdBar').innerHTML = mH;
+    if (rsiData[i]!==null) {
+      const clr = rsiData[i]>=70 ? '#ef5350' : rsiData[i]<=30 ? '#26a69a' : '#00bcd4';
+      document.getElementById('rsiBar').innerHTML = `<span>RSI(14): <span style="color:${clr};font-weight:600">${rsiData[i].toFixed(2)}</span></span>`;
+    }
+  });
+  chart.on('globalout', function() {
+    document.getElementById('maBar').innerHTML = '';
+    document.getElementById('macdBar').innerHTML = '';
+    document.getElementById('rsiBar').innerHTML = '';
+  });
+  window.addEventListener('resize', () => chart.resize());
+
+  const option = {
+    backgroundColor: '#1a1a2e',
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross' },
+      backgroundColor: 'rgba(30,30,50,0.95)',
+      borderColor: '#333',
+      textStyle: { color: '#ddd', fontSize: 12 },
+      formatter: function(ps) {
+        if (!ps || !ps[0]) return '';
+        const i = ps[0].dataIndex;
+        const o = ohlc[i];
+        return `<b>${times[i]}</b><br/>
+          Open: ${o[0].toFixed(2)} &nbsp; Close: ${o[1].toFixed(2)}<br/>
+          High: ${o[3].toFixed(2)} &nbsp; Low: ${o[2].toFixed(2)}<br/>
+          Vol: ${(volumes[i][1]/1e6).toFixed(1)}M`;
+      }
+    },
+    axisPointer: { link: [{ xAxisIndex: 'all' }], label: { backgroundColor: '#333' } },
+    grid: [
+      { left: '8%', right: '2%', top: '6%', height: '38%' },
+      { left: '8%', right: '2%', top: '48%', height: '10%' },
+      { left: '8%', right: '2%', top: '63%', height: '12%' },
+      { left: '8%', right: '2%', top: '80%', height: '11%' }
+    ],
+    xAxis: [
+      { type: 'category', data: times, boundaryGap: false, axisLine: { lineStyle: { color: '#333' } }, axisLabel: { show: false } },
+      { type: 'category', gridIndex: 1, data: times, boundaryGap: false, axisLine: { lineStyle: { color: '#333' } }, axisLabel: { color: '#888', interval: 59 } },
+      { type: 'category', gridIndex: 2, data: times, boundaryGap: false, axisLine: { lineStyle: { color: '#333' } }, axisLabel: { show: false } },
+      { type: 'category', gridIndex: 3, data: times, boundaryGap: false, axisLine: { lineStyle: { color: '#333' } }, axisLabel: { color: '#888', interval: 59 } },
+    ],
+    yAxis: [
+      { scale: true, splitArea: { show: true, areaStyle: { color: ['rgba(255,255,255,0.02)','rgba(255,255,255,0.05)'] } }, axisLine: { lineStyle: { color: '#333' } }, axisLabel: { color: '#888', formatter: v => v.toFixed(0) }, splitLine: { lineStyle: { color: '#222' } } },
+      { scale: true, gridIndex: 1, splitNumber: 2, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#888', formatter: v => (v/1e6).toFixed(1)+'M', fontSize: 10 }, splitLine: { show: false } },
+      { scale: true, gridIndex: 2, axisLine: { lineStyle: { color: '#333' } }, axisLabel: { color: '#888', fontSize: 10 }, splitLine: { lineStyle: { color: '#222' } } },
+      { gridIndex: 3, min: 0, max: 100, axisLine: { lineStyle: { color: '#333' } }, axisLabel: { color: '#888', fontSize: 10 }, splitLine: { lineStyle: { color: '#222' } }, splitArea: { show: true, areaStyle: { color: ['rgba(255,255,255,0.02)','rgba(255,255,255,0.05)'] } } },
+    ],
+    dataZoom: [
+      { type: 'inside', xAxisIndex: [0,1,2,3], start: 0, end: 100, zoomOnMouseWheel: true, moveOnMouseMove: true },
+      { type: 'slider', xAxisIndex: [0,1,2,3], start: 0, end: 100, height: 22, bottom: 6, borderColor: '#333', backgroundColor: '#1a1a2e',
+        dataBackground: { lineStyle: { color: '#1e90ff' }, areaStyle: { color: 'rgba(30,144,255,0.15)' } },
+        selectedDataBackground: { lineStyle: { color: '#1e90ff' }, areaStyle: { color: 'rgba(30,144,255,0.3)' } },
+        handleStyle: { color: '#1e90ff' }, textStyle: { color: '#888' } },
+    ],
+    series: [
+      { name: 'Close', type: 'line', data: closes, symbol: 'none', lineStyle: { color: '#1e90ff', width: 1.5 },
+        areaStyle: { color: 'rgba(30,144,255,0.08)' } },
+      { name: 'MA5', type: 'line', data: ma5, smooth: true, symbol: 'none', lineStyle: { color: '#ff9800', width: 1 } },
+      { name: 'MA10', type: 'line', data: ma10, smooth: true, symbol: 'none', lineStyle: { color: '#2196f3', width: 1 } },
+      { name: 'MA20', type: 'line', data: ma20, smooth: true, symbol: 'none', lineStyle: { color: '#9c27b0', width: 1 } },
+      { name: 'Volume', type: 'bar', xAxisIndex: 1, yAxisIndex: 1,
+        data: volumes.map((v,i) => ({ value: v[1], itemStyle: { color: ohlc[i][1]>=ohlc[i][0] ? upColor : downColor } })) },
+      { name: 'MACD Hist', type: 'bar', xAxisIndex: 2, yAxisIndex: 2,
+        data: macdHist.map((v,i) => v===null ? null : { value: v, itemStyle: { color: v>=0 ? upColor : downColor } }) },
+      { name: 'MACD Line', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: macdLine, symbol: 'none', lineStyle: { color: '#e0e0e0', width: 1 } },
+      { name: 'Signal', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: macdSignal, symbol: 'none', lineStyle: { color: '#ff5722', width: 1 } },
+      { name: 'RSI', type: 'line', xAxisIndex: 3, yAxisIndex: 3, data: rsiData, symbol: 'none', lineStyle: { color: '#00bcd4', width: 1.5 },
+        markLine: { silent: true, symbol: 'none', lineStyle: { type: 'dashed', width: 1 },
+          data: [{ yAxis: 70, lineStyle: { color: '#ef5350' } }, { yAxis: 30, lineStyle: { color: '#26a69a' } }, { yAxis: 50, lineStyle: { color: '#666' } }] } },
+    ]
+  };
+  chart.setOption(option);
+}
+
+init();
+</script>
+</body>
+</html>

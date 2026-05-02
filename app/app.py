@@ -501,5 +501,63 @@ def api_ticker_info():
     return jsonify({"ticker": ticker, "name": name, "exchange": ex})
 
 
+@app.route("/intraday")
+def intraday_page():
+    return render_template("intraday.html")
+
+
+@app.route("/api/intraday")
+def api_intraday():
+    ticker = request.args.get("ticker", DEFAULT_TICKER).strip().upper()
+    date = request.args.get("date", "").strip()
+    if not date:
+        return jsonify({"error": "date required"}), 400
+
+    try:
+        yt = yf.Ticker(ticker)
+        end_dt = datetime.strptime(date, "%Y-%m-%d") + timedelta(days=1)
+        df = yt.history(start=date, end=end_dt.strftime("%Y-%m-%d"), interval="1m")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    if df.empty:
+        return jsonify({"error": f"No intraday data for {ticker} on {date}"}), 404
+
+    times = []
+    ohlc = []
+    volumes = []
+    for idx, row in df.iterrows():
+        times.append(idx.strftime("%H:%M"))
+        ohlc.append([float(row["Open"]), float(row["Close"]), float(row["Low"]), float(row["High"])])
+        volumes.append([bool(row["Close"] >= row["Open"]), int(float(row["Volume"]))])
+
+    # Calculate indicators
+    closes = [o[1] for o in ohlc]
+    ma5 = ma(closes, 5)
+    ma10 = ma(closes, 10)
+    ma20 = ma(closes, 20)
+    macd_line, macd_signal, macd_hist = macd(closes)
+    rsi14 = rsi(closes)
+
+    # Get company name
+    try:
+        info = yt.info
+        name = info.get("shortName") or info.get("longName") or ticker
+    except Exception:
+        name = ticker
+
+    return jsonify({
+        "ticker": ticker,
+        "name": name,
+        "date": date,
+        "times": times,
+        "ohlc": ohlc,
+        "volumes": volumes,
+        "ma5": ma5, "ma10": ma10, "ma20": ma20,
+        "macd_line": macd_line, "macd_signal": macd_signal, "macd_hist": macd_hist,
+        "rsi14": rsi14,
+    })
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)
