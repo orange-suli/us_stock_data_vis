@@ -1,7 +1,10 @@
 import atexit
 import csv
 import io
+import os
 import sqlite3
+import sys
+import tempfile
 import requests
 import yfinance as yf
 from collections import OrderedDict
@@ -9,8 +12,18 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from flask import Flask, jsonify, request, render_template, Response
 
-app = Flask(__name__)
-DB_PATH = Path(__file__).parent / "nasdaq.db"
+# PyInstaller support: use writable temp dir for DB, MEIPASS for templates
+FROZEN = getattr(sys, 'frozen', False)
+if FROZEN:
+    _base = Path(sys._MEIPASS)
+    DB_PATH = Path(tempfile.gettempdir()) / "market_chart.db"
+    template_dir = str(_base / "app" / "templates")
+    app = Flask(__name__, template_folder=template_dir)
+else:
+    _base = Path(__file__).parent
+    DB_PATH = _base / "nasdaq.db"
+    app = Flask(__name__)
+
 DEFAULT_TICKER = "^IXIC"
 LOOKBACK_YEARS = 5
 
@@ -565,5 +578,9 @@ def api_intraday():
     })
 
 
+def start_server(port=5000, debug=False):
+    app.run(host="127.0.0.1", port=port, debug=debug, use_reloader=False)
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)
+    start_server(debug=True)
