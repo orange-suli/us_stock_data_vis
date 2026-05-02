@@ -104,6 +104,57 @@
   }
   #intraBtn:hover { background: #ff9800; color: #fff; }
 
+  /* Watchlist sidebar */
+  #watchSidebar {
+    position: fixed; left: 0; top: 44px; bottom: 0;
+    width: 220px; background: #0d1117; border-right: 1px solid #222;
+    z-index: 50; transform: translateX(-220px); transition: transform 0.25s;
+    display: flex; flex-direction: column;
+  }
+  #watchSidebar.open { transform: translateX(0); }
+  #watchToggle {
+    position: fixed; left: 0; top: 50%; transform: translateY(-50%);
+    z-index: 51; width: 18px; height: 60px;
+    background: #1e90ff33; border: 1px solid #1e90ff55; border-left: none;
+    border-radius: 0 4px 4px 0; cursor: pointer; color: #1e90ff;
+    font-size: 11px; writing-mode: vertical-lr; text-align: center;
+    transition: left 0.25s, background 0.2s; padding: 4px 0;
+  }
+  #watchToggle:hover { background: #1e90ff66; }
+  #watchToggle.open { left: 220px; }
+  #watchSidebar h3 {
+    padding: 10px 14px; font-size: 13px; color: #aaa; font-weight: 500;
+    border-bottom: 1px solid #1a1a2e;
+  }
+  #watchList { flex: 1; overflow-y: auto; padding: 6px 0; }
+  #watchList .wl-item {
+    padding: 7px 14px; cursor: pointer; font-size: 12px;
+    display: flex; justify-content: space-between; align-items: center;
+    transition: background 0.15s; color: #ccc;
+  }
+  #watchList .wl-item:hover { background: #1e90ff1a; }
+  #watchList .wl-item.active { background: #1e90ff33; color: #1e90ff; }
+  #watchList .wl-item .sym { font-weight: 600; }
+  #watchList .wl-item .del {
+    color: #666; font-size: 14px; cursor: pointer; padding: 0 4px; visibility: hidden;
+  }
+  #watchList .wl-item:hover .del { visibility: visible; }
+  #watchList .wl-item .del:hover { color: #ef5350; }
+  #watchAdd {
+    display: flex; padding: 8px; border-top: 1px solid #1a1a2e; gap: 6px;
+  }
+  #watchAdd input {
+    flex: 1; padding: 5px 8px; border: 1px solid #333; background: #16213e;
+    color: #ddd; border-radius: 3px; font-size: 12px; outline: none;
+    text-transform: uppercase;
+  }
+  #watchAdd input:focus { border-color: #1e90ff; }
+  #watchAdd button {
+    padding: 5px 10px; border: none; border-radius: 3px;
+    background: #1e90ff; color: #fff; cursor: pointer; font-size: 12px;
+  }
+  #watchAdd button:hover { background: #1976d2; }
+
   #chartWrap { position: relative; width: 100%; height: calc(100vh - 44px); }
   #chart { width: 100%; height: 100%; }
   .indicator-bar {
@@ -178,6 +229,15 @@
     <a id="intraBtn" target="_blank">Intraday</a>
   </div>
 </div>
+<div id="watchToggle">Watchlist</div>
+<div id="watchSidebar">
+  <h3>Watchlist</h3>
+  <div id="watchList"></div>
+  <div id="watchAdd">
+    <input type="text" id="watchInput" placeholder="Add ticker..." autocomplete="off" spellcheck="false">
+    <button id="watchAddBtn">+</button>
+  </div>
+</div>
 <div id="chartWrap">
   <div id="maBar" class="indicator-bar" style="color:#aaa"></div>
   <div id="macdBar" class="indicator-bar" style="color:#aaa"></div>
@@ -202,6 +262,72 @@ let ma5 = [], ma10 = [], ma20 = [];
 let macdLine = [], macdSignal = [], macdHist = [];
 let rsiData = [];
 let chart = null;
+
+// ── Watchlist ──
+function loadWatchlist() {
+  try { return JSON.parse(localStorage.getItem('mc_watchlist') || '[]'); }
+  catch { return []; }
+}
+function saveWatchlist(list) { localStorage.setItem('mc_watchlist', JSON.stringify(list)); }
+function renderWatchlist() {
+  const list = loadWatchlist();
+  const el = document.getElementById('watchList');
+  el.innerHTML = list.map(item =>
+    `<div class="wl-item${item.ticker===currentTicker?' active':''}" data-ticker="${item.ticker}">
+      <span class="sym">${item.ticker}</span>
+      <span class="nm">${item.name||''}</span>
+      <span class="del" data-ticker="${item.ticker}">&times;</span>
+    </div>`
+  ).join('') || '<div style="color:#666;font-size:11px;padding:10px 14px">No stocks yet</div>';
+
+  el.querySelectorAll('.wl-item').forEach(div => {
+    div.addEventListener('click', function(e) {
+      if (e.target.classList.contains('del')) return;
+      switchTicker(this.dataset.ticker);
+    });
+  });
+  el.querySelectorAll('.del').forEach(del => {
+    del.addEventListener('click', function(e) {
+      e.stopPropagation();
+      removeFromWatchlist(this.dataset.ticker);
+    });
+  });
+}
+function addToWatchlist(ticker, name) {
+  const list = loadWatchlist();
+  if (list.find(s => s.ticker === ticker)) return;
+  list.push({ ticker, name: name || ticker });
+  saveWatchlist(list);
+  renderWatchlist();
+}
+function removeFromWatchlist(ticker) {
+  let list = loadWatchlist();
+  list = list.filter(s => s.ticker !== ticker);
+  saveWatchlist(list);
+  renderWatchlist();
+}
+
+// Sidebar toggle
+const watchSidebar = document.getElementById('watchSidebar');
+const watchToggle = document.getElementById('watchToggle');
+let watchOpen = false;
+watchToggle.addEventListener('click', function() {
+  watchOpen = !watchOpen;
+  watchSidebar.classList.toggle('open', watchOpen);
+  watchToggle.classList.toggle('open', watchOpen);
+});
+
+// Add to watchlist button
+document.getElementById('watchAddBtn').addEventListener('click', function() {
+  const input = document.getElementById('watchInput');
+  const ticker = input.value.trim().toUpperCase();
+  if (!ticker) return;
+  addToWatchlist(ticker);
+  input.value = '';
+});
+document.getElementById('watchInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') { document.getElementById('watchAddBtn').click(); }
+});
 
 function calcMA(ohlc, period) {
   const result = [];
@@ -485,6 +611,7 @@ async function switchTicker(ticker, stockName, stockEx) {
   document.getElementById('loading').style.display = 'block';
   document.getElementById('fetchStatus').textContent = '';
   clearIndicators();
+  renderWatchlist();
   await Promise.all([loadPeriod(currentPeriod), loadSummary(), loadDates()]);
   document.getElementById('loading').style.display = 'none';
 }
@@ -566,6 +693,7 @@ async function searchStock(ticker, stockName, stockEx) {
     setTimeout(() => { statusEl.style.opacity = '0'; }, 2000);
     statusEl.style.opacity = '1';
 
+    addToWatchlist(ticker, stockName || '');
     await switchTicker(ticker, stockName, stockEx);
   } catch (e) {
     statusEl.textContent = '';
@@ -606,6 +734,7 @@ function zoomToIndex(idx) {
 }
 
 async function init() {
+  renderWatchlist();
   await switchTicker(DEFAULT_TICKER);
 
   // Index select dropdown
