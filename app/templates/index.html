@@ -58,6 +58,21 @@
   }
   #stockSearch:focus { border-color: #1e90ff; }
   #stockSearch::placeholder { color: #666; text-transform: none; }
+  #suggestWrap { position: relative; }
+  #suggestBox {
+    position: absolute; top: 100%; left: 0; right: 0;
+    background: #16213e; border: 1px solid #333; border-top: none;
+    border-radius: 0 0 4px 4px; z-index: 300; display: none;
+    max-height: 260px; overflow-y: auto;
+  }
+  #suggestBox .item {
+    padding: 6px 10px; cursor: pointer; font-size: 12px;
+    border-bottom: 1px solid #1e1e3a;
+    display: flex; justify-content: space-between; gap: 12px;
+  }
+  #suggestBox .item:hover { background: #1e90ff33; }
+  #suggestBox .item .sym { color: #1e90ff; font-weight: 600; white-space: nowrap; }
+  #suggestBox .item .nm { color: #aaa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #dateSearch {
     padding: 4px 8px;
     border: 1px solid #444;
@@ -143,7 +158,10 @@
     <button data-period="day" class="active">Daily</button>
     <button data-period="week">Weekly</button>
     <button data-period="month">Monthly</button>
-    <input type="text" id="stockSearch" placeholder="Ticker..." autocomplete="off" spellcheck="false">
+    <span id="suggestWrap">
+      <input type="text" id="stockSearch" placeholder="Ticker..." autocomplete="off" spellcheck="false">
+      <div id="suggestBox"></div>
+    </span>
     <input type="text" id="dateSearch" placeholder="Jump to date..." list="dateList" autocomplete="off">
     <datalist id="dateList"></datalist>
     <input type="date" id="dlStart" lang="en" title="Start date">
@@ -578,8 +596,62 @@ async function init() {
 
   // Stock search
   const stockInput = document.getElementById('stockSearch');
+  const suggestBox = document.getElementById('suggestBox');
+  let suggestTimer = null;
+
+  stockInput.addEventListener('input', function() {
+    clearTimeout(suggestTimer);
+    const q = this.value.trim();
+    if (q.length < 2) { suggestBox.style.display = 'none'; return; }
+    suggestTimer = setTimeout(async () => {
+      try {
+        const resp = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        const items = await resp.json();
+        if (items.length === 0) { suggestBox.style.display = 'none'; return; }
+        suggestBox.innerHTML = items.map(item =>
+          `<div class="item" data-sym="${item.symbol}">
+            <span class="sym">${item.symbol}</span>
+            <span class="nm">${item.name}</span>
+          </div>`
+        ).join('');
+        suggestBox.style.display = 'block';
+      } catch(e) { suggestBox.style.display = 'none'; }
+    }, 200);
+  });
+
   stockInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') searchStock(this.value);
+    if (e.key === 'Escape') { suggestBox.style.display = 'none'; return; }
+    if (e.key === 'Enter') {
+      const sel = suggestBox.querySelector('.item.selected');
+      if (sel) { searchStock(sel.dataset.sym); suggestBox.style.display = 'none'; }
+      else searchStock(this.value);
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const items = suggestBox.querySelectorAll('.item');
+      if (items.length === 0) return;
+      const sel = suggestBox.querySelector('.item.selected');
+      let idx = sel ? Array.from(items).indexOf(sel) : -1;
+      if (e.key === 'ArrowDown') idx = (idx + 1) % items.length;
+      else idx = idx <= 0 ? items.length - 1 : idx - 1;
+      items.forEach(i => i.classList.remove('selected'));
+      items[idx].classList.add('selected');
+      items[idx].scrollIntoView({ block: 'nearest' });
+    }
+  });
+
+  suggestBox.addEventListener('click', function(e) {
+    const item = e.target.closest('.item');
+    if (item) {
+      searchStock(item.dataset.sym);
+      suggestBox.style.display = 'none';
+      stockInput.value = '';
+    }
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('#suggestWrap')) suggestBox.style.display = 'none';
   });
 
   // Date search

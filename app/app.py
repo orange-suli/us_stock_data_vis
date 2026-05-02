@@ -2,6 +2,7 @@ import atexit
 import csv
 import io
 import sqlite3
+import requests
 import yfinance as yf
 from collections import OrderedDict
 from datetime import datetime, timedelta
@@ -444,6 +445,45 @@ def api_fetch():
         "ticker": ticker, "dates": dates, "ohlc": ohlc, "volumes": volumes,
         "source": "yfinance", "rows": len(rows)
     })
+
+
+@app.route("/api/search")
+def api_search():
+    q = request.args.get("q", "").strip()
+    if not q or len(q) < 2:
+        return jsonify([])
+
+    try:
+        resp = requests.get(
+            "https://query1.finance.yahoo.com/v1/finance/search",
+            params={"q": q, "quotesCount": 10, "newsCount": 0},
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=5,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        return jsonify([])
+
+    results = []
+    for quote in data.get("quotes", []):
+        symbol = quote.get("symbol", "")
+        name = quote.get("shortname") or quote.get("longname") or ""
+        ex = quote.get("exchange", "")
+        qtype = quote.get("quoteType", "")
+        # Only include equities and ETFs
+        if qtype not in ("EQUITY", "ETF"):
+            continue
+        # Filter out non-US symbols (keep those without dots or with common US patterns)
+        if "." in symbol:
+            continue
+        results.append({
+            "symbol": symbol,
+            "name": name,
+            "exchange": ex,
+        })
+
+    return jsonify(results[:8])
 
 
 if __name__ == "__main__":
