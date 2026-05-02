@@ -13,6 +13,7 @@ A full-stack financial charting application covering NASDAQ, S&P 500, Dow Jones,
 - **Daily / Weekly / Monthly** period switching
 - **Zoom & pan** — mouse wheel, drag, slider, date search, click any data point, or set a date range and press Enter
 - **Hover indicators** — MA, MACD, and RSI values update on mouse move above each panel
+- **Intraday chart** — click any data point then "Intraday: YYYY-MM-DD" for 1-minute line chart with MACD/Volume/RSI (last 30 days, free via yfinance)
 - **CSV export** — download the visible or custom date range with all indicators
 - **Auto-refresh** — fresh 5-year data on every startup; incremental updates while running
 - **Self-cleaning** — database wiped on exit; no stale data between sessions
@@ -68,6 +69,7 @@ conda run -n nasdaq python app/app.py
 | `POST` | `/api/fetch` `{"ticker":"AAPL"}` | Fetch & cache stock |
 | `GET` | `/api/search?q=` | Autocomplete search (ticker/name) |
 | `GET` | `/api/ticker-info?ticker=` | Company name & exchange |
+| `GET` | `/api/intraday?ticker=&date=` | 1-minute OHLCV + indicators |
 | `GET` | `/api/download?ticker=&start=&end=` | CSV with indicators |
 
 Default ticker is `^IXIC`. All `GET` endpoints accept `?ticker=`.
